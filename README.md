@@ -1,7 +1,7 @@
 # ![image](https://github.com/user-attachments/assets/ebbba7fd-29be-44a4-9f69-93d51690bdfd) 
 # A Modern Polling Booth QR Code Scanner 📊✨
 **VoteXpress** is an innovative solution designed to streamline the voter verification process at polling booths using QR codes. By leveraging Google Sheets, QR code scanning, voice commands, and an intuitive interface, it empowers polling station operators to verify voters quickly and accurately. Whether you're a tech enthusiast, a developer, or just interested in cutting-edge voting tech, this project is a game-changer!
-
+ <img  alt="Coding" src="https://media.giphy.com/media/xUOxfdB8Ttz0ulAzPG/giphy.gif?cid=ecf05e474s11auycebwq61x7hquhdr5bz15gcm849efchq2c&ep=v1_gifs_search&rid=giphy.gif&ct=g">
 ---
 
 ## **Features:**
