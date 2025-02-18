@@ -17,7 +17,8 @@
   
 ---
 
-## **Installation and Setup** 🛠️
+## **Installation and Setup** 🛠️ 
+
 
 To get started, follow these steps to set up and run the **VoteXpress** app on your machine.
 
@@ -54,6 +55,7 @@ To get started, follow these steps to set up and run the **VoteXpress** app on y
    ```
 
    This will launch the graphical user interface (GUI) where you can login, scan QR codes, and track voter status.
+    ![image](https://github.com/user-attachments/assets/0a730b59-6bd0-4524-8ff2-eab1377238d4)
 
 ---
 
