@@ -5,7 +5,9 @@ import tkinter as tk
 from tkinter import messagebox
 import speech_recognition as sr
 import threading
-
+import face_recognition
+import numpy as np
+import ast
 # Define the scope of access for Google Sheets API
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
 
@@ -43,6 +45,10 @@ translations = {
         "voter_underage": "Voter is below 18 years old and cannot vote.",
         "voter_already_voted": "Voter has already voted at {station}.",
         "voter_voted": "Voter {name} has been marked as 'Voted' at {station}.",
+        "face_matching_in_progress": 'Face matching in progress...',
+        "face_matched": 'Face matched for voter',
+        'proceeding_with_status': 'Proceeding with status update.',
+        'face_not_matched': 'Face not matched for voter. Please try again.'
     },
     "hi": {
         "title": "पोलिंग बूथ क्यूआर कोड स्कैनर",
@@ -62,6 +68,10 @@ translations = {
         "voter_underage": "वोटर 18 साल से कम उम्र का है और वोट नहीं कर सकता।",
         "voter_already_voted": "वोटर ने पहले ही {station} पर वोट किया है।",
         "voter_voted": "वोटर {name} को '{station}' पर 'वोट' के रूप में चिह्नित किया गया है।",
+        "face_matching_in_progress": "चेहरे का मिलान हो रहा है...",
+        "face_matched": "वोटर के लिए चेहरा मेल खाता है",
+        "proceeding_with_status": "स्थिति अपडेट की प्रक्रिया की जा रही है।",
+        "face_not_matched": "वोटर के लिए चेहरा मेल नहीं खाता है। कृपया पुनः प्रयास करें।",
     }
 }
 
@@ -112,6 +122,7 @@ def check_and_update_voter_status(voter_data, selected_station, result_label, la
 # Function to scan QR code using OpenCV
 def scan_qr_code(result_label, selected_station, language):
     cap = cv2.VideoCapture(0)
+    scanned_voter_id = None  # Variable to store voter ID
 
     while True:
         ret, frame = cap.read()
@@ -123,10 +134,21 @@ def scan_qr_code(result_label, selected_station, language):
 
         if value:
             print(f"QR Code detected: {value}")
+            voter_data_split = value.split(", ")
+            scanned_voter_id = voter_data_split[0].split(": ")[1]  # Store the voter ID here
+
             cap.release()
             cv2.destroyAllWindows()
+
+            # Show the QR code scan instruction
             result_label.config(text=get_translation(language, "scan_qr_instruction") + f": {value}", fg='black')
-            check_and_update_voter_status(value, selected_station, result_label, language)
+
+            # Create the Scan Face button after QR code is detected
+            face_scan_button = tk.Button(root, text="Scan Face", font=("Helvetica", 14),
+                                         bg="#4A90E2", fg="white",
+                                         command=lambda: scan_face_for_verification(scanned_voter_id, result_label,
+                                                                                    value, selected_station, language, face_scan_button))
+            face_scan_button.pack(pady=20)
             return value
 
         cv2.imshow("QR Code Scanner", frame)
@@ -136,6 +158,92 @@ def scan_qr_code(result_label, selected_station, language):
 
     cap.release()
     cv2.destroyAllWindows()
+
+
+def scan_face_for_verification(voter_id, result_label, voter_data, selected_station, language, face_scan_button):
+    # Show "Face matching..." message immediately after face scan button is pressed
+    result_label.config(text=get_translation(language, "face_matching_in_progress"), fg='blue')
+    root.update()  # Ensure real-time UI update
+
+    # Now, we call match_face only when the button is clicked
+    match_result = match_face(voter_id)  # Only passing the voter_id to match_face
+
+    if match_result:
+        # Update message and proceed with the status update
+        result_label.config(
+            text=f"{get_translation(language, 'face_matched')} {voter_id}. {get_translation(language, 'proceeding_with_status')}",
+            fg='green')
+        root.update()  # Ensure real-time UI update
+
+        # Hide the face scan button after the process
+        face_scan_button.pack_forget()
+
+        # Now we can proceed to check and update the voter status after face verification
+        check_and_update_voter_status(voter_data, selected_station, result_label, language)
+    else:
+        # Update message if face doesn't match
+        result_label.config(text=f"{get_translation(language, 'face_not_matched')} {voter_id}.", fg='red')
+        root.update()  # Ensure real-time UI update
+
+
+# Ensure real-time UI update
+
+
+# Capture image from webcam
+def capture_image():
+    cap = cv2.VideoCapture(0)
+    ret, frame = cap.read()
+    cap.release()
+    return frame
+
+
+# Convert image to facial encoding
+def get_face_encoding(image):
+    face_locations = face_recognition.face_locations(image)
+    if face_locations:
+        return face_recognition.face_encodings(image, face_locations)[0]
+    return None
+
+
+
+# Match face with stored encodings
+
+# Function to retrieve stored face encoding from Google Sheets (8th column)
+def get_stored_face_encoding(voter_id):
+    records = sheet.get_all_values()[1:]  # Skip header row
+    for row in records:
+        if row[0] == voter_id:  # Assuming 1st column is voter ID
+            encoding_str = row[7]  # 8th column contains face encoding
+            return np.array(ast.literal_eval(encoding_str))  # Convert string back to numpy array
+    return None
+
+
+# Function to match the face scan with stored face encoding
+def match_face(voter_id):
+    stored_encoding = get_stored_face_encoding(voter_id)
+
+    if stored_encoding is None:
+        print("No face encoding found in the database.")
+        return False
+
+    # Capture a new image for face scanning
+    image = capture_image()
+    new_encoding = get_face_encoding(image)
+
+    if new_encoding is None:
+        print("No face detected. Try again.")
+        return False
+
+    # Compare the new encoding with the stored encoding
+    match = face_recognition.compare_faces([stored_encoding], new_encoding)
+    distance = face_recognition.face_distance([stored_encoding], new_encoding)[0]
+
+    if match[0]:
+        print(f"Match Found for {voter_id} (Confidence: {1 - distance:.2f})")
+        return True
+    else:
+        print(f"No match found for {voter_id}.")
+        return False
 
 
 # Function to verify operator login from Google Sheet
