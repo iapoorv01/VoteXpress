@@ -1,6 +1,6 @@
 import cv2
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import firebase_admin
+from firebase_admin import credentials, firestore
 import tkinter as tk
 from tkinter import messagebox
 import speech_recognition as sr
@@ -8,24 +8,19 @@ import threading
 import face_recognition
 import numpy as np
 import ast
-# Define the scope of access for Google Sheets API
-scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
 
-# Path to your service account credentials file (replace with your actual file path)
-creds = ServiceAccountCredentials.from_json_keyfile_name('trial.json', scope)
+# Initialize Firebase Admin SDK
+cred = credentials.Certificate("govt-database-firebase-adminsdk-fbsvc-a7ffad6280.json")
+firebase_admin.initialize_app(cred)
 
-# Authenticate with Google Sheets API
-client = gspread.authorize(creds)
+# Initialize Firestore client
+db = firestore.client()
 
-# Open the Google Sheet for voter data
-spreadsheet_id = '1PULy8xQG2kTreo_zxwnSVHfZ78FzdpVFUmXpipPFZ9U'
-sheet = client.open_by_key(spreadsheet_id).sheet1  # Access the first sheet for voters
+# Firestore collections
+voters_ref = db.collection('voters')  # Voter data
+operators_ref = db.collection('operators')  # Operator data
 
-# Open the Google Sheet for operator data (from OperatorDatabase)
-operator_spreadsheet_id = '1lu8fSY9nHvZRVracqnH2AMLsqZxm0F5P4NIWPHIEwVw'  # Operator database ID
-operator_sheet = client.open_by_key(operator_spreadsheet_id).sheet1  # Access the first sheet for operators
-
-# Language dictionary to store translations for English and Hindi
+# Language dictionary for translations (as you have defined)
 translations = {
     "en": {
         "title": "Polling Booth QR Code Scanner",
@@ -48,7 +43,10 @@ translations = {
         "face_matching_in_progress": 'Face matching in progress...',
         "face_matched": 'Face matched for voter',
         'proceeding_with_status': 'Proceeding with status update.',
-        'face_not_matched': 'Face not matched for voter. Please try again.'
+        'face_not_matched': 'Face not matched for voter. Please try again.',
+        'missing_info': 'Missing information in Voter ID. Please try again.',
+        'QR_DATA': 'Scanned Data:',
+        'scan_face': 'Scan Face'
     },
     "hi": {
         "title": "पोलिंग बूथ क्यूआर कोड स्कैनर",
@@ -72,17 +70,20 @@ translations = {
         "face_matched": "वोटर के लिए चेहरा मेल खाता है",
         "proceeding_with_status": "स्थिति अपडेट की प्रक्रिया की जा रही है।",
         "face_not_matched": "वोटर के लिए चेहरा मेल नहीं खाता है। कृपया पुनः प्रयास करें।",
+        'missing_info': 'वोटर आईडी में कुछ जानकारी गायब है। कृपया फिर से प्रयास करें।',
+        'QR_DATA': 'स्कैन किया गया डेटा:',
+        'scan_face': 'चेहरा स्कैन करें'
+
+
     }
 }
-
 
 # Function to get the translation for the selected language
 def get_translation(language, key, **kwargs):
     translation = translations.get(language, {}).get(key, key)
     return translation.format(**kwargs) if kwargs else translation
 
-
-# Function to check and update voter status
+# Function to check and update voter status in Firestore
 def check_and_update_voter_status(voter_data, selected_station, result_label, language):
     voter_data_split = voter_data.split(", ")
     voter_id = voter_data_split[0].split(": ")[1]
@@ -91,25 +92,29 @@ def check_and_update_voter_status(voter_data, selected_station, result_label, la
     voter_mobile = voter_data_split[3].split(": ")[1]
     voter_age = int(voter_data_split[4].split(": ")[1])
 
-    # Search for the voter in the Google Sheet
-    cell = sheet.find(voter_id)
+    # Fetch the voter document from Firestore
+    voter_doc = voters_ref.document(voter_id).get()
 
-    if cell:
-        row = sheet.row_values(cell.row)  # Fetch the row details
+    if voter_doc.exists:
+        voter_data_from_db = voter_doc.to_dict()
 
         # Check if all data matches the corresponding fields
-        if (row[0] == voter_id and row[1] == voter_name and row[2] == voter_aadhaar and row[3] == voter_mobile and row[
-            4] == str(voter_age)):
+        if (voter_data_from_db["name"] == voter_name and
+            voter_data_from_db["aadhaar_number"] == voter_aadhaar and
+            voter_data_from_db["mobile_number"] == voter_mobile and
+            voter_data_from_db["age"] == voter_age):
 
             if voter_age >= 18:
-                if row[5] == "Not Voted":  # Mark as "Voted" in the sheet
-                    sheet.update_cell(cell.row, 6, "Voted")  # Update 'Voter Status' column
-                    sheet.update_cell(cell.row, 7, selected_station)  # Store the polling station ID in column 7
+                if voter_data_from_db["voter_status"] == "Not Voted":  # Update the status to "Voted"
+                    voters_ref.document(voter_id).update({
+                        "voter_status": "Voted",
+                        "polling_station": selected_station
+                    })
                     result_label.config(
                         text=get_translation(language, "voter_voted", name=voter_name, station=selected_station),
                         fg='green')
                 else:
-                    result_label.config(text=get_translation(language, "voter_already_voted", station=row[6]),
+                    result_label.config(text=get_translation(language, "voter_already_voted", station=voter_data_from_db["polling_station"]),
                                         fg='orange')
             else:
                 result_label.config(text=get_translation(language, "voter_underage"), fg='red')
@@ -117,48 +122,6 @@ def check_and_update_voter_status(voter_data, selected_station, result_label, la
             result_label.config(text=get_translation(language, "voter_data_mismatch"), fg='red')
     else:
         result_label.config(text=get_translation(language, "voter_status_not_found"), fg='red')
-
-
-# Function to scan QR code using OpenCV
-def scan_qr_code(result_label, selected_station, language):
-    cap = cv2.VideoCapture(0)
-    scanned_voter_id = None  # Variable to store voter ID
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        detector = cv2.QRCodeDetector()
-        value, pts, qr_code = detector.detectAndDecode(frame)
-
-        if value:
-            print(f"QR Code detected: {value}")
-            voter_data_split = value.split(", ")
-            scanned_voter_id = voter_data_split[0].split(": ")[1]  # Store the voter ID here
-
-            cap.release()
-            cv2.destroyAllWindows()
-
-            # Show the QR code scan instruction
-            result_label.config(text=get_translation(language, "scan_qr_instruction") + f": {value}", fg='black')
-
-            # Create the Scan Face button after QR code is detected
-            face_scan_button = tk.Button(root, text="Scan Face", font=("Helvetica", 14),
-                                         bg="#4A90E2", fg="white",
-                                         command=lambda: scan_face_for_verification(scanned_voter_id, result_label,
-                                                                                    value, selected_station, language, face_scan_button))
-            face_scan_button.pack(pady=20)
-            return value
-
-        cv2.imshow("QR Code Scanner", frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
 
 def scan_face_for_verification(voter_id, result_label, voter_data, selected_station, language, face_scan_button):
     # Show "Face matching..." message immediately after face scan button is pressed
@@ -183,10 +146,82 @@ def scan_face_for_verification(voter_id, result_label, voter_data, selected_stat
     else:
         # Update message if face doesn't match
         result_label.config(text=f"{get_translation(language, 'face_not_matched')} {voter_id}.", fg='red')
-        root.update()  # Ensure real-time UI update
+        root.update()
 
+# Function to scan QR code using OpenCV
+def scan_qr_code(result_label, selected_station, language):
+    cap = cv2.VideoCapture(0)
+    scanned_voter_id = None  # Variable to store voter ID
 
-# Ensure real-time UI update
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        detector = cv2.QRCodeDetector()
+        value, pts, qr_code = detector.detectAndDecode(frame)
+
+        if value:
+            print(f"QR Code detected: {value}")
+            voter_data_split = value.split(", ")
+
+            # Define the expected fields
+            expected_fields = ["Voter ID", "Name", "Aadhaar", "Mobile", "Age"]
+
+            # Initialize list for missing fields
+            missing_fields = []
+
+            # Loop through the expected fields and check for missing data
+            for i, field in enumerate(expected_fields):
+                # Check if the corresponding data in voter_data_split is missing
+                if i >= len(voter_data_split) or not voter_data_split[i].strip():
+                    missing_fields.append(field)
+
+            # If any field is missing, show the missing fields
+            if missing_fields:
+                result_label.config(
+                    text=f"{get_translation(language, 'missing_info')}: {', '.join(missing_fields)}",
+                    fg='red'
+                )
+                cap.release()
+                cv2.destroyAllWindows()
+                return  # Stop processing if fields are missing
+
+            # If all fields are present, store the voter ID
+            scanned_voter_id = voter_data_split[0].split(": ")[1]
+
+            cap.release()
+            cv2.destroyAllWindows()
+
+            # Show the QR code scan instruction
+            result_label.config(
+                text=get_translation(language, "QR_DATA") + f": {value}",
+                fg='blue'
+            )
+
+            # Create the Scan Face button after QR code is detected
+            face_scan_button =tk.Button(root,
+                                        text=get_translation(language, "scan_face"),
+                                        font=("Helvetica", 14),
+                                        bg="#4A90E2", fg="white",
+                                        command=lambda: scan_face_for_verification(
+                                        scanned_voter_id, result_label,
+                                        value, selected_station, language,
+                                        face_scan_button
+                )
+            )
+
+            face_scan_button.pack(pady=20)
+            return value
+
+        cv2.imshow("QR Code Scanner", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
 
 
 # Capture image from webcam
@@ -204,21 +239,17 @@ def get_face_encoding(image):
         return face_recognition.face_encodings(image, face_locations)[0]
     return None
 
-
-
-# Match face with stored encodings
-
-# Function to retrieve stored face encoding from Google Sheets (8th column)
+# Face matching functions (same as before, using Firestore instead of Google Sheets)
 def get_stored_face_encoding(voter_id):
-    records = sheet.get_all_values()[1:]  # Skip header row
-    for row in records:
-        if row[0] == voter_id:  # Assuming 1st column is voter ID
-            encoding_str = row[7]  # 8th column contains face encoding
-            return np.array(ast.literal_eval(encoding_str))  # Convert string back to numpy array
+    voter_doc = voters_ref.document(voter_id).get()
+    if voter_doc.exists:
+        voter_data = voter_doc.to_dict()
+        encoding_str = voter_data.get("eye_retina")
+        if encoding_str:
+            return np.array(ast.literal_eval(encoding_str))
     return None
 
 
-# Function to match the face scan with stored face encoding
 def match_face(voter_id):
     stored_encoding = get_stored_face_encoding(voter_id)
 
@@ -246,18 +277,17 @@ def match_face(voter_id):
         return False
 
 
-# Function to verify operator login from Google Sheet
+# Function to verify operator login from Firestore
 def operator_login(username, password, result_label, login_button, language):
     try:
-        cell = operator_sheet.find(username)
+        operator_doc = operators_ref.document(username).get()
 
-        if cell:
-            row = operator_sheet.row_values(cell.row)
-
-            stored_password = row[1]  # Retrieve the stored password
+        if operator_doc.exists:
+            operator_data = operator_doc.to_dict()
+            stored_password = operator_data.get("operator_password")
 
             if stored_password == password:
-                assigned_station = row[2]
+                assigned_station = operator_data.get("operator_station")
                 result_label.config(
                     text=get_translation(language, "login_successful", assigned_station=assigned_station), fg='green')
 
@@ -277,7 +307,6 @@ def operator_login(username, password, result_label, login_button, language):
         print(f"Error: {e}")
 
     return None
-
 
 # Voice Command Listener
 def listen_for_command(language):
@@ -319,7 +348,7 @@ def process_voice_command(assigned_station, result_label, language):
                 print(get_translation(language, "command_not_recognized"))
 
 
-# Main function to create the GUI
+# Main function to create the GUI (same as before)
 def create_gui():
     global root
     root = tk.Tk()
@@ -349,9 +378,9 @@ def create_gui():
     password_entry = tk.Entry(login_frame, show="*", font=("Helvetica", 12))
     password_entry.grid(row=1, column=1, padx=10, pady=5)
 
-    # Language selection dropdown (Only English and Hindi)
-    language_var = tk.StringVar(value="en")  # Default language is English
-    language_options = ["en", "hi"]  # Only English and Hindi
+    # Language selection dropdown
+    language_var = tk.StringVar(value="en")
+    language_options = ["en", "hi"]
     language_dropdown = tk.OptionMenu(root, language_var, *language_options)
     language_dropdown.pack(pady=10)
 
@@ -360,7 +389,6 @@ def create_gui():
                             bg="#f4f4f9")
     result_label.pack(pady=20)
 
-    # Function to start the login process
     def login():
         username = username_entry.get()
         password = password_entry.get()
@@ -386,11 +414,9 @@ def create_gui():
                                     bg="#e94e77", fg="white", command=root.quit)
             exit_button.pack(pady=20)
 
-    # Login button
     login_button = tk.Button(root, text=get_translation("en", "login_button"), font=("Helvetica", 14), bg="#4A90E2",
                              fg="white", command=login)
     login_button.pack(pady=20)
-
     # Function to start QR code scanning
     def start_scanning(assigned_station, result_label, language):
         scan_qr_code(result_label, assigned_station, language)  # Start QR scanning
@@ -417,6 +443,7 @@ def create_gui():
 
     # Run the Tkinter event loop
     root.mainloop()
+
 
 
 if __name__ == "__main__":
