@@ -83,8 +83,10 @@ def get_translation(language, key, **kwargs):
     translation = translations.get(language, {}).get(key, key)
     return translation.format(**kwargs) if kwargs else translation
 
+
 # Function to check and update voter status in Firestore
 def check_and_update_voter_status(voter_data, selected_station, result_label, language):
+    # Parse the voter data
     voter_data_split = voter_data.split(", ")
     voter_id = voter_data_split[0].split(": ")[1]
     voter_name = voter_data_split[1].split(": ")[1]
@@ -114,8 +116,9 @@ def check_and_update_voter_status(voter_data, selected_station, result_label, la
                         text=get_translation(language, "voter_voted", name=voter_name, station=selected_station),
                         fg='green')
                 else:
-                    result_label.config(text=get_translation(language, "voter_already_voted", station=voter_data_from_db["polling_station"]),
-                                        fg='orange')
+                    result_label.config(
+                        text=get_translation(language, "voter_already_voted", station=voter_data_from_db["polling_station"]),
+                        fg='orange')
             else:
                 result_label.config(text=get_translation(language, "voter_underage"), fg='red')
         else:
@@ -123,12 +126,13 @@ def check_and_update_voter_status(voter_data, selected_station, result_label, la
     else:
         result_label.config(text=get_translation(language, "voter_status_not_found"), fg='red')
 
+# Function to scan face for verification
 def scan_face_for_verification(voter_id, result_label, voter_data, selected_station, language, face_scan_button):
     # Show "Face matching..." message immediately after face scan button is pressed
     result_label.config(text=get_translation(language, "face_matching_in_progress"), fg='blue')
     root.update()  # Ensure real-time UI update
 
-    # Now, we call match_face only when the button is clicked
+    # Call match_face only when the button is clicked
     match_result = match_face(voter_id)  # Only passing the voter_id to match_face
 
     if match_result:
@@ -141,7 +145,7 @@ def scan_face_for_verification(voter_id, result_label, voter_data, selected_stat
         # Hide the face scan button after the process
         face_scan_button.pack_forget()
 
-        # Now we can proceed to check and update the voter status after face verification
+        # Proceed to check and update the voter status after face verification
         check_and_update_voter_status(voter_data, selected_station, result_label, language)
     else:
         # Update message if face doesn't match
@@ -192,23 +196,75 @@ def scan_qr_code(result_label, selected_station, language):
 
             cap.release()
             cv2.destroyAllWindows()
-
-            # Show the QR code scan instruction
             result_label.config(
                 text=get_translation(language, "QR_DATA") + f": {value}",
                 fg='blue'
             )
 
+            # Check if voter has already voted
+            voter_doc = voters_ref.document(scanned_voter_id).get()
+            if voter_doc.exists:
+                voter_data_from_db = voter_doc.to_dict()
+
+                if voter_data_from_db["voter_status"] == "Voted":
+                    # Perform re-verification check
+                    reverification_ref = db.collection('reverification_attempts')
+                    reverification_doc = reverification_ref.document(scanned_voter_id)
+
+                    # Check if the document already exists (the voter has attempted verification before)
+                    reverification_data = reverification_doc.get()
+
+                    if reverification_data.exists:
+                        # If the document exists, increment the number of attempts
+                        existing_data = reverification_data.to_dict()
+                        new_attempt_count = existing_data["attempt_count"] + 1
+                        polling_stations = existing_data["polling_stations"]
+
+                        # Add the new polling station to the list (if not already added)
+                        if selected_station not in polling_stations:
+                            polling_stations.append(selected_station)
+
+                        # Update the re-verification document with the new attempt count and polling stations
+                        reverification_doc.update({
+                            "attempt_count": new_attempt_count,
+                            "polling_stations": polling_stations,
+                            "last_attempt_time": firestore.SERVER_TIMESTAMP
+                        })
+                    else:
+                        # If no document exists, create a new one with initial data
+                        voter_name = voter_data_from_db["name"]
+                        voter_aadhaar = voter_data_from_db["aadhaar_number"]
+                        voter_mobile = voter_data_from_db["mobile_number"]
+                        voter_age = voter_data_from_db["age"]
+
+                        reverification_doc.set({
+                            "attempt_count": 1,
+                            "polling_stations": [selected_station],
+                            "voter_id": scanned_voter_id,
+                            "name": voter_name,
+                            "aadhaar_number": voter_aadhaar,
+                            "mobile_number": voter_mobile,
+                            "age": voter_age,
+                            "first_attempt_time": firestore.SERVER_TIMESTAMP,
+                            "last_attempt_time": firestore.SERVER_TIMESTAMP
+                        })
+                    result_label.config(
+                            text=get_translation(language, "voter_already_voted", station=voter_data_from_db["polling_station"]),
+                            fg='orange')
+                    return
+
+            # Proceed to face scan only if the voter hasn't voted yet and re-verification is successful
+
             # Create the Scan Face button after QR code is detected
-            face_scan_button =tk.Button(root,
-                                        text=get_translation(language, "scan_face"),
-                                        font=("Helvetica", 14),
-                                        bg="#4A90E2", fg="white",
-                                        command=lambda: scan_face_for_verification(
-                                        scanned_voter_id, result_label,
-                                        value, selected_station, language,
-                                        face_scan_button
-                )
+            face_scan_button = tk.Button(root,
+                                         text=get_translation(language, "scan_face"),
+                                         font=("Helvetica", 14),
+                                         bg="#4A90E2", fg="white",
+                                         command=lambda: scan_face_for_verification(
+                                             scanned_voter_id, result_label,
+                                             value, selected_station, language,
+                                             face_scan_button
+                                         )
             )
 
             face_scan_button.pack(pady=20)
@@ -221,6 +277,7 @@ def scan_qr_code(result_label, selected_station, language):
 
     cap.release()
     cv2.destroyAllWindows()
+
 
 
 
