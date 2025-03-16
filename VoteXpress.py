@@ -8,7 +8,9 @@ import threading
 import face_recognition
 import numpy as np
 import ast
-
+import random
+import math
+import winsound
 # Initialize Firebase Admin SDK
 cred = credentials.Certificate("govt-database-firebase-adminsdk-fbsvc-a7ffad6280.json")
 firebase_admin.initialize_app(cred)
@@ -22,8 +24,14 @@ operators_ref = db.collection('operators')  # Operator data
 
 # Language dictionary for translations (as you have defined)
 translations = {
-    "en": {
+    "English": {
+        "instruction_text": """
+    1. Login with the authorized ID and password provided \n        by the government.
+    2. Make sure no one is looking before typing your password.
+    3. Do not share your password with anyone.
+    """,
         "title": "Polling Booth QR Code Scanner",
+        "login" : "Login",
         "username": "Username:",
         "password": "Password:",
         "login_button": "Login",
@@ -48,8 +56,14 @@ translations = {
         'QR_DATA': 'Scanned Data:',
         'scan_face': 'Scan Face'
     },
-    "hi": {
+    "Hindi": {
+        "instruction_text":"""
+    1. सरकार द्वारा प्रदान की गई अधिकृत आईडी और पासवर्ड के साथ \n        लॉगिन करें।
+    2. पासवर्ड टाइप करने से पहले यह सुनिश्चित करें कि कोई नहीं देख रहा हो।
+    3. अपना पासवर्ड किसी के साथ साझा न करें।
+    """,
         "title": "पोलिंग बूथ क्यूआर कोड स्कैनर",
+        "login": "लॉगिन",
         "username": "उपयोगकर्ता नाम:",
         "password": "पासवर्ड:",
         "login_button": "लॉग इन करें",
@@ -83,7 +97,9 @@ def get_translation(language, key, **kwargs):
     translation = translations.get(language, {}).get(key, key)
     return translation.format(**kwargs) if kwargs else translation
 
-
+def play_beep():
+    # Frequency is in hertz (e.g., 1000 Hz), duration is in milliseconds (e.g., 500 ms)
+    winsound.Beep(1000, 500)
 # Function to check and update voter status in Firestore
 def check_and_update_voter_status(voter_data, selected_station, result_label, language):
     # Parse the voter data
@@ -126,34 +142,10 @@ def check_and_update_voter_status(voter_data, selected_station, result_label, la
     else:
         result_label.config(text=get_translation(language, "voter_status_not_found"), fg='red')
 
-# Function to scan face for verification
-def scan_face_for_verification(voter_id, result_label, voter_data, selected_station, language, face_scan_button):
-    # Show "Face matching..." message immediately after face scan button is pressed
-    result_label.config(text=get_translation(language, "face_matching_in_progress"), fg='blue')
-    root.update()  # Ensure real-time UI update
 
-    # Call match_face only when the button is clicked
-    match_result = match_face(voter_id)  # Only passing the voter_id to match_face
-
-    if match_result:
-        # Update message and proceed with the status update
-        result_label.config(
-            text=f"{get_translation(language, 'face_matched')} {voter_id}. {get_translation(language, 'proceeding_with_status')}",
-            fg='green')
-        root.update()  # Ensure real-time UI update
-
-        # Hide the face scan button after the process
-        face_scan_button.pack_forget()
-
-        # Proceed to check and update the voter status after face verification
-        check_and_update_voter_status(voter_data, selected_station, result_label, language)
-    else:
-        # Update message if face doesn't match
-        result_label.config(text=f"{get_translation(language, 'face_not_matched')} {voter_id}.", fg='red')
-        root.update()
 
 # Function to scan QR code using OpenCV
-def scan_qr_code(result_label, selected_station, language):
+def scan_qr_code(result_label, selected_station, language, scan_button,big_canvas):
     cap = cv2.VideoCapture(0)
     scanned_voter_id = None  # Variable to store voter ID
 
@@ -166,6 +158,7 @@ def scan_qr_code(result_label, selected_station, language):
         value, pts, qr_code = detector.detectAndDecode(frame)
 
         if value:
+            play_beep()
             print(f"QR Code detected: {value}")
             voter_data_split = value.split(", ")
 
@@ -197,8 +190,8 @@ def scan_qr_code(result_label, selected_station, language):
             cap.release()
             cv2.destroyAllWindows()
             result_label.config(
-                text=get_translation(language, "QR_DATA") + f": {value}",
-                fg='blue'
+                text=get_translation(language, "QR_DATA") + "\n" + "\n".join(value.split(",")),
+                fg='blue', font=("Javanese Text", 25),height=8
             )
 
             # Check if voter has already voted
@@ -250,33 +243,72 @@ def scan_qr_code(result_label, selected_station, language):
                         })
                     result_label.config(
                             text=get_translation(language, "voter_already_voted", station=voter_data_from_db["polling_station"]),
-                            fg='orange')
+                            fg='orange',height=4)
                     return
 
             # Proceed to face scan only if the voter hasn't voted yet and re-verification is successful
 
-            # Create the Scan Face button after QR code is detected
+            scan_button.pack_forget()  # Hide the QR scan button after QR scan
+            # Create the Face Scan button after QR code is detected
+            # Create the "Scan Face" button on canvas after QR code is scanned
             face_scan_button = tk.Button(root,
                                          text=get_translation(language, "scan_face"),
-                                         font=("Helvetica", 14),
-                                         bg="#4A90E2", fg="white",
+                                         font=("STENCIL", 30),
+                                         bg="#4A90E2", fg="white",width=33,
                                          command=lambda: scan_face_for_verification(
                                              scanned_voter_id, result_label,
                                              value, selected_station, language,
-                                             face_scan_button
+                                             face_scan_button, scan_button,big_canvas
                                          )
             )
+            face_scan_button_window = big_canvas.create_window(430, 700, window=face_scan_button)
 
-            face_scan_button.pack(pady=20)
             return value
 
         cv2.imshow("QR Code Scanner", frame)
-
+        cv2.resizeWindow("QR Code Scanner", 750, 490)
+        cv2.moveWindow("QR Code Scanner", 151, 192)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
+
+# Function to handle face scan and hide/show buttons accordingly
+def scan_face_for_verification(voter_id, result_label, voter_data, selected_station, language, face_scan_button,scan_button,big_canvas):
+    # Show "Face matching..." message immediately after face scan button is pressed
+    result_label.config(text=get_translation(language, "face_matching_in_progress"), fg='blue',height=4)
+    root.update()  # Ensure real-time UI update
+
+    # Call match_face only when the button is clicked
+    match_result = match_face(voter_id)  # Only passing the voter_id to match_face
+
+    if match_result:
+        # Update message and proceed with the status update
+        result_label.config(
+            text=f"{get_translation(language, 'face_matched')} {voter_id}. {get_translation(language, 'proceeding_with_status')}",
+            fg='green',height=4)
+        root.update()  # Ensure real-time UI update
+
+        # Hide the face scan button after the process
+
+        # Proceed to check and update the voter status after face verification
+        check_and_update_voter_status(voter_data, selected_station, result_label, language)
+
+        # Re-show the QR scan button
+
+
+    else:
+        # Update message if face doesn't match
+        result_label.config(text=f"{get_translation(language, 'face_not_matched')} {voter_id}.", fg='red',height=4)
+        root.update()
+    face_scan_button.pack_forget()
+    scan_button = tk.Button(root, text=get_translation(language, "scan_button"), font=("Helvetica", 30),
+                            bg="#4A90E2", fg="white", width=33,
+                            command=lambda: scan_qr_code(result_label,selected_station, language,
+                                                           scan_button, big_canvas))
+    scan_button_window = big_canvas.create_window(430, 700,
+                                                  window=scan_button)
 
 
 
@@ -335,7 +367,7 @@ def match_face(voter_id):
 
 
 # Function to verify operator login from Firestore
-def operator_login(username, password, result_label, login_button, language):
+def operator_login(username, password, login_label, login_button, language):
     try:
         operator_doc = operators_ref.document(username).get()
 
@@ -345,22 +377,22 @@ def operator_login(username, password, result_label, login_button, language):
 
             if stored_password == password:
                 assigned_station = operator_data.get("operator_station")
-                result_label.config(
+                login_label.config(
                     text=get_translation(language, "login_successful", assigned_station=assigned_station), fg='green')
 
                 login_button.pack_forget()
 
-                root.after(2000, lambda: result_label.config(text=get_translation(language, "scan_qr_instruction"),
+                root.after(2000, lambda: login_label.config(text=get_translation(language, "scan_qr_instruction"),
                                                              fg='black'))  # Reset message after 2 seconds
 
                 return assigned_station
             else:
-                result_label.config(text=get_translation(language, "invalid_password"), fg='red')
+                login_label.config(text=get_translation(language, "invalid_password"), fg='red')
         else:
-            result_label.config(text=get_translation(language, "operator_not_found"), fg='red')
+            login_label.config(text=get_translation(language, "operator_not_found"), fg='red')
 
     except Exception as e:
-        result_label.config(text=get_translation(language, "invalid_password"), fg='red')
+        login_label.config(text=get_translation(language, "invalid_password"), fg='red')
         print(f"Error: {e}")
 
     return None
@@ -405,89 +437,379 @@ def process_voice_command(assigned_station, result_label, language):
                 print(get_translation(language, "command_not_recognized"))
 
 
-# Main function to create the GUI (same as before)
+
+
 def create_gui():
     global root
     root = tk.Tk()
     root.title("Polling Booth QR Scanner")
 
-    # Set window size
-    root.geometry("600x400")
+    # Set window size and make it full-screen
+    root.attributes("-fullscreen", True)  # Set to full screen
+
+    # Function to toggle full screen on Escape key press
+    def toggle_full_screen(event=None):
+        current_state = root.attributes("-fullscreen")
+        root.attributes("-fullscreen", not current_state)  # Toggle full-screen mode
+
+    # Bind Escape key to toggle full screen
+    root.bind("<Escape>", toggle_full_screen)
 
     # Set background color and title font
-    root.configure(bg="#f4f4f9")
-    title_label = tk.Label(root, text=get_translation("en", "title"), font=("Helvetica", 20, "bold"), bg="#f4f4f9",
-                           fg="#4A90E2")
-    title_label.pack(pady=20)
+    root.configure(bg="#ffffff")
 
-    # Login Frame
-    login_frame = tk.Frame(root, bg="#f4f4f9")
-    login_frame.pack(pady=10)
+    # Create a canvas for the glitter effect
+    glitter_canvas = tk.Canvas(root, width=root.winfo_screenwidth(), height=root.winfo_screenheight(), bg="white",
+                               highlightthickness=0)
+    glitter_canvas.place(x=0, y=0)
 
-    # Username and Password fields with modern styling
-    username_label = tk.Label(login_frame, text=get_translation("en", "username"), font=("Helvetica", 12), bg="#f4f4f9")
-    username_label.grid(row=0, column=0, padx=10, pady=5)
-    username_entry = tk.Entry(login_frame, font=("Helvetica", 12))
-    username_entry.grid(row=0, column=1, padx=10, pady=5)
+    # Maximum number of glitter particles allowed at a time
+    MAX_GLITTER_PARTICLES = 1000
+    active_glitter = []  # List to store the active glitter particle IDs
 
-    password_label = tk.Label(login_frame, text=get_translation("en", "password"), font=("Helvetica", 12), bg="#f4f4f9")
-    password_label.grid(row=1, column=0, padx=10, pady=5)
-    password_entry = tk.Entry(login_frame, show="*", font=("Helvetica", 12))
-    password_entry.grid(row=1, column=1, padx=10, pady=5)
+    # Store the velocities for the glitter particles
+    velocities = {}
 
-    # Language selection dropdown
-    language_var = tk.StringVar(value="en")
-    language_options = ["en", "hi"]
-    language_dropdown = tk.OptionMenu(root, language_var, *language_options)
-    language_dropdown.pack(pady=10)
+    # Function to create a random glitter particle
+    def create_glitter():
+        size = random.randint(2, 6)  # Random size for glitter particle
+        x = random.randint(0, root.winfo_screenwidth())  # Random X position
+        y = random.randint(0, root.winfo_screenheight())  # Random Y position
+        glitter_color = '#38b6ff'  # Sky blue color
+        # Create a glitter particle on the canvas
+        glitter_id = glitter_canvas.create_oval(x, y, x + size, y + size, fill=glitter_color, outline=glitter_color)
 
-    # Result label to show login status
-    result_label = tk.Label(root, text=get_translation("en", "please_login"), font=("Arial", 14), height=2,
-                            bg="#f4f4f9")
-    result_label.pack(pady=20)
+        # Add the new glitter particle to the active list
+        active_glitter.append(glitter_id)
+
+        # Initialize its velocity to zero (its moving initially)
+        velocities[glitter_id] = {'vx': random.uniform(-5, 5), 'vy': random.uniform(-5, 5)}
+
+        # Set the glitter ball to disappear after 10 seconds
+        glitter_canvas.after(10000, lambda: remove_glitter(glitter_id))  # Remove glitter after 10 seconds
+
+        # If there are more than the maximum allowed glitter particles, remove the oldest one
+        if len(active_glitter) > MAX_GLITTER_PARTICLES:
+            remove_glitter(active_glitter.pop(0))  # Remove the first glitter particle
+
+    # Function to remove a glitter particle
+    def remove_glitter(glitter_id):
+        glitter_canvas.delete(glitter_id)  # Delete the glitter particle
+        if glitter_id in active_glitter:
+            active_glitter.remove(glitter_id)
+            del velocities[glitter_id]  # Remove its velocity
+
+    # Function to animate the glitter particles
+    def animate_glitter():
+        create_glitter()  # Create new glitter particle
+        root.after(50, animate_glitter)  # Call this function every 50 milliseconds (asynchronously)
+
+    # Start the glitter animation
+    animate_glitter()
+
+    # Function to check if the mouse is close to a glitter particle
+    def is_cursor_near_particle(glitter_id, cursor_x, cursor_y):
+        coords = glitter_canvas.coords(glitter_id)
+        if coords:  # Ensure coords are valid (non-empty)
+            x1, y1, x2, y2 = coords
+            # Check if the cursor is within a small range around the glitter particle
+            distance = 15  # The distance at which the glitter particle will react to the cursor
+            if x1 - distance <= cursor_x <= x2 + distance and y1 - distance <= cursor_y <= y2 + distance:
+                return True
+        return False
+
+    # Function to calculate the bounce away vector and update velocity
+    def bounce_away(glitter_id, cursor_x, cursor_y):
+        coords = glitter_canvas.coords(glitter_id)
+        if coords:
+            x1, y1, x2, y2 = coords
+            # Get the center of the glitter particle
+            glitter_center_x = (x1 + x2) / 2
+            glitter_center_y = (y1 + y2) / 2
+
+            # Calculate the vector from the glitter to the cursor
+            dx = cursor_x - glitter_center_x
+            dy = cursor_y - glitter_center_y
+            distance = math.sqrt(dx ** 2 + dy ** 2)
+
+            if distance < 15:  # If the cursor is within the "bounce" distance
+                # Normalize the vector (make it unit length)
+                if distance != 0:
+                    dx /= distance
+                    dy /= distance
+
+                # Apply a "bounce" effect by setting the velocity in the opposite direction
+                velocity_factor = 10  # Adjust the bounce strength
+                velocities[glitter_id]['vx'] = -dx * velocity_factor
+                velocities[glitter_id]['vy'] = -dy * velocity_factor
+
+    # Function to update glitter position and simulate bouncing effect
+    def update_glitter_positions():
+        for glitter_id in active_glitter:
+            # Move the glitter according to its velocity
+            vel = velocities[glitter_id]
+            glitter_canvas.move(glitter_id, vel['vx'], vel['vy'])
+
+            # Check for boundary collision and apply a bounce effect (bounce inside the screen)
+            coords = glitter_canvas.coords(glitter_id)
+            if coords:
+                x1, y1, x2, y2 = coords
+                if x1 <= 0 or x2 >= root.winfo_screenwidth():
+                    vel['vx'] = -vel['vx']  # Reverse horizontal velocity if boundary is hit
+                if y1 <= 0 or y2 >= root.winfo_screenheight():
+                    vel['vy'] = -vel['vy']  # Reverse vertical velocity if boundary is hit
+
+        root.after(50, update_glitter_positions)  # Call this function to update positions every 50ms
+
+    # Function to move glitter particles with the cursor (this triggers the bounce effect)
+    def move_glitter_with_cursor(event):
+        for glitter_id in active_glitter:
+            if is_cursor_near_particle(glitter_id, event.x, event.y):
+                bounce_away(glitter_id, event.x, event.y)
+
+    # Bind the mouse motion event to make glitter bounce away from the cursor
+    root.bind("<Motion>", move_glitter_with_cursor)
+
+    # Start updating the glitter positions (bouncy behavior)
+    update_glitter_positions()
+
+    # Load the logo using Tkinter's PhotoImage
+    logo_image = tk.PhotoImage(file="VoteXpress logo.png")  # Replace with your logo path
+
+    # Create label for the logo and place it at the top-left corner
+    logo_label = tk.Label(root, image=logo_image, bg="#ffffff")
+    logo_label.place(x=-20, y=-30)
+
+    # Functionality for buttons
+    def minimize_window():
+        root.iconify()
+
+    def toggle_maximize():
+        current_state = root.state()  # Get the current window state
+        if current_state == 'normal':
+            root.state('zoomed')  # Maximize the window
+        else:
+            root.state('normal')  # Restore the window to normal size
+
+    def close_window():
+        root.destroy()
+
+    # Create a frame to hold the buttons
+    button_frame = tk.Frame(root, bg="white")
+    button_frame.pack(side=tk.TOP, anchor="ne", padx=5, pady=5)
+
+    # Button Styles
+    btn_style = {
+        "bg": "white",
+        "fg": "#38b6ff",
+        "font": ("Arial", 20),
+        "width": 3,
+        "bd": 4,  # Border width
+        "relief": "sunken",  # Border style
+        "highlightbackground": "#38b6ff",  # Border color when not focused
+        "highlightcolor": "#38b6ff",  # Border color when focused
+        "highlightthickness": 2  # Thickness of the highlight border
+    }
+
+    # Minimize Button
+    min_btn = tk.Button(button_frame, text="-", command=minimize_window, **btn_style)
+    min_btn.pack(side=tk.LEFT, padx=2)
+
+    # Maximize Button
+    max_btn = tk.Button(button_frame, text="🗖", command=toggle_maximize, **btn_style)
+    max_btn.pack(side=tk.LEFT, padx=2, pady=1)
+
+    # Close Button
+    close_btn = tk.Button(button_frame, text="✖", command=close_window, **btn_style)
+    close_btn.pack(side=tk.LEFT, padx=2)
+
+    # Title label
+
+
+    shadow_frame = tk.Frame(root, bg="#e0dfdf", bd=0)  # Dark gray background for the shadow frame
+    shadow_frame.pack(pady=30, padx=30, expand=True)
+
+    # Create the actual login box frame
+    login_box_frame = tk.Frame(shadow_frame, bg="#ffffff", bd=4, relief=tk.GROOVE)
+    login_box_frame.pack(pady=10, padx=10, expand=True)
+
+    # Add a label with the text "Login" above the fields in the frame
+    login_label = tk.Label(login_box_frame, text=get_translation("English", "login"), font=("Elephant", 95, "bold"), bg="#ffffff")
+    login_label.grid(row=0, column=0,padx=20, pady=20, sticky='w')  # Align "Login" label to the top-left corner
+
+    def on_focus_in(event, entry, placeholder, show=""):
+        """Remove placeholder text when the entry field is focused."""
+        if entry.get() == placeholder:
+            entry.delete(0, tk.END)
+            entry.config(fg='#585858')  # Set text color to black when focused
+            if show:
+                entry.config(show="*")  # For password, hide the characters with "*"
+
+    def on_focus_out(event, entry, placeholder, show=""):
+        """Restore placeholder text if the entry field is empty."""
+        if entry.get() == '':
+            entry.insert(0, placeholder)
+            entry.config(fg='#B0B0B0')  # Simulate opacity by using a lighter gray color
+            if show:
+                entry.config(show='')
+
+    username_placeholder = " Username"
+    password_placeholder = " Password"
+
+    # Create the username entry with placeholder
+    username_entry = tk.Entry(login_box_frame, font=("Perpetua", 40), relief=tk.GROOVE, borderwidth=2,
+                              fg='#B0B0B0')  # Lighter gray for placeholder text
+    username_entry.insert(0, username_placeholder)  # Insert placeholder text initially
+    username_entry.grid(row=1, column=0, columnspan=4, padx=20, pady=30, sticky='ew')
+
+    # Creating the password entry with placeholder text
+    password_entry = tk.Entry(login_box_frame, font=("Perpetua", 40), relief=tk.GROOVE, borderwidth=2,
+                              fg='#B0B0B0')  # Lighter gray for placeholder text
+    password_entry.insert(0, password_placeholder)  # Insert placeholder text initially
+    password_entry.grid(row=2, column=0, columnspan=4, padx=20, pady=10, sticky='ew')
+
+    # Binding focus events to handle placeholder and opacity effect
+    username_entry.bind("<FocusIn>", lambda event: on_focus_in(event, username_entry, username_placeholder))
+    username_entry.bind("<FocusOut>", lambda event: on_focus_out(event, username_entry, username_placeholder))
+
+    password_entry.bind("<FocusIn>", lambda event: on_focus_in(event, password_entry, password_placeholder, show="*"))
+    password_entry.bind("<FocusOut>", lambda event: on_focus_out(event, password_entry, password_placeholder, show="*"))
+
+    # Language selection dropdown inside the login box frame
+    # Language selection dropdown inside the login box frame
+    language_var = tk.StringVar(value="English")
+    language_options = ["English", "Hindi"]
+
+    # Custom dropdown menu using Canvas
+    def update_dropdown(lang):
+        language_var.set(lang)
+        canvas.itemconfig(lang_text, text=lang)  # Update the text displayed on the canvas dropdown
+
+    canvas = tk.Canvas(login_box_frame, width=232, height=60, bg="white", highlightthickness=0)
+    canvas.grid(row=3, column=0, columnspan=4, pady=30, padx=10)
+
+    canvas.create_oval(5, 5, 55, 55, outline="#24A3FF", width=2)  # Left side curve (bigger)
+    canvas.create_oval(185, 5, 230, 55, outline="#24A3FF", width=2)  # Right side curve (bigger)
+    canvas.create_rectangle(31, 5, 208, 55, outline="#24A3FF", width=2)  # Middle part (bigger)
+    # Middle part
+
+    # Globe icon (Unicode 🌐)
+    canvas.create_text(32, 24, text="🌎", font=("Arial", 30), fill="#24A3FF")
+
+    # "English" text (changes dynamically)
+    lang_text = canvas.create_text(118, 30, text=language_var.get(), font=("Arial", 22, "bold"), fill="#24A3FF")
+
+    # Right arrow (Unicode ➜)
+    canvas.create_text(216, 30, text="➜", font=("Arial", 25), fill="#24A3FF")
+
+    # Create a menu for language options
+    menu = tk.Menu(root, tearoff=0, bg="white", fg="black", font=("Arial", 16))
+
+    for lang in language_options:
+        menu.add_command(label=lang, command=lambda l=lang: update_dropdown(l))
+
+    def show_menu(event):
+        menu.post(event.x_root, event.y_root)
+
+    canvas.bind("<Button-1>", show_menu)
+
+    # Result label to show login status inside the login box frame
+    instruction_label = tk.Label(login_box_frame, text=get_translation("English","instruction_text"), font=("Arial", 17), height=4,justify="left", anchor="w", bg="#ffffff")
+    instruction_label.grid(row=4, column=0, columnspan=2, pady=20)
+
+    login_label=tk.Label(root, text="", font=("Arial", 17), height=4, justify="left", anchor="w", bg="#ffffff")
+    login_label.place(x=800, y=900)
+    # Login Button inside the login box frame
+
 
     def login():
         username = username_entry.get()
         password = password_entry.get()
         language = language_var.get()
-        assigned_station = operator_login(username, password, result_label, login_button, language)
+        assigned_station = operator_login(username, password, login_label, login_button, language)
 
         if assigned_station:
-            login_frame.pack_forget()
+            login_box_frame.pack_forget()
+            shadow_frame.pack_forget()
+            login_label.place_forget()
+
+
+
+
+
+            # Create the big canvas
+            # Create the big canvas
+            big_canvas = tk.Canvas(root, width=1700, height=800, bg="#ffffff",bd=2)  # Modify the height as needed
+
+            # Calculate the position to center the canvas
+            canvas_x = (root.winfo_screenwidth() - 1700) / 2  # Centering horizontally
+            canvas_y = (root.winfo_screenheight() - 800) / 2  # Centering vertically
+
+            # Place the canvas in the center
+            big_canvas.place(x=canvas_x, y=canvas_y)
+            result_label = tk.Label(root, text="", font=("Javanese Text", 25), height=4, justify="left", anchor="w",
+                                    bg="#ffffff")
+            result_label_window = big_canvas.create_window(1300, 400,
+                                                           window=result_label)  # Adjust coordinates as needed
             result_label.config(text=get_translation(language, "scan_qr_instruction"), fg='black')
-
             # Start listening for voice commands after login
-            threading.Thread(target=process_voice_command, args=(assigned_station, result_label, language),
-                             daemon=True).start()
+            threading.Thread(target=process_voice_command, args=(assigned_station, result_label, language), daemon=True).start()
 
-            # Scan button to start QR code scanning
-            scan_button = tk.Button(root, text=get_translation(language, "scan_button"), font=("Helvetica", 14),
-                                    bg="#4A90E2", fg="white",
-                                    command=lambda: start_scanning(assigned_station, result_label, language))
-            scan_button.pack(pady=20)
+            # Load the logo using Tkinter's PhotoImage
+            vc_image = tk.PhotoImage(file="vc.png")  # Replace with your logo path
 
-            # Exit button to close the application
-            exit_button = tk.Button(root, text=get_translation(language, "exit_button"), font=("Helvetica", 14),
-                                    bg="#e94e77", fg="white", command=root.quit)
-            exit_button.pack(pady=20)
+            # Store the image in a variable so it doesn't get garbage-collected
+            root.logo_image = vc_image  # This keeps the image in memory
 
-    login_button = tk.Button(root, text=get_translation("en", "login_button"), font=("Helvetica", 14), bg="#4A90E2",
-                             fg="white", command=login)
-    login_button.pack(pady=20)
+            # Create the label for the logo and place it on the canvas using create_image
+            vc_label = big_canvas.create_image(20, 30, image=vc_image, anchor="nw")
+
+            # Create the scan button and place it on the canvas
+            scan_button = tk.Button(root, text=get_translation(language, "scan_button"), font=("STENCIL", 30),
+                                    bg="#4A90E2", fg="white", width=33,
+                                    command=lambda: start_scanning(assigned_station, result_label, language,
+                                                                   scan_button,big_canvas))
+            scan_button_window = big_canvas.create_window(430, 700,
+                                                          window=scan_button)  # Place the button at the specified coordinates
+
+            # Create the exit button and place it on the canvas
+            exit_button = tk.Button(root, text="Exit", font=("STENCIL", 27), bg="#e94e77", fg="white", width=20,
+                                    command=root.quit)
+            exit_button_window = big_canvas.create_window(1300, 700, window=exit_button)
+
+
+    def on_hover(event):
+        login_button.config(bg="#3c7dbd")  # Lighter blue when hovered
+
+    def off_hover(event):
+        login_button.config(bg="#4A90E2")  # Original blue color when not hovered
+
+    login_button = tk.Button(login_box_frame, text=get_translation("English","login_button"), font=("STENCIL", 25), width=20, bg="#4A90E2", fg="white",
+                              highlightthickness=3, bd=0, command=login)
+
+    # Add the hover effect events
+    login_button.grid(row=7, column=0, columnspan=20, padx=100, pady=20)
+    login_button.bind("<Enter>", on_hover)  # Mouse enters
+    login_button.bind("<Leave>", off_hover)
+    sizeadjust = tk.Label(login_box_frame, text="", font=("Arial", 30), height=2, bg="#ffffff")
+    sizeadjust.grid(row=8, column=0, columnspan=2, pady=20)
+
+
+
     # Function to start QR code scanning
-    def start_scanning(assigned_station, result_label, language):
-        scan_qr_code(result_label, assigned_station, language)  # Start QR scanning
+    def start_scanning(assigned_station, result_label, language,scan_button,big_canvas):
+        scan_qr_code(result_label, assigned_station, language,scan_button,big_canvas)  # Start QR scanning
 
     # Function to update the UI language when the dropdown changes
     def update_ui_language(*args):
         language = language_var.get()
 
         # Update all text elements
-        title_label.config(text=get_translation(language, "title"))
-        username_label.config(text=get_translation(language, "username"))
-        password_label.config(text=get_translation(language, "password"))
+
+
+        login_label.config(text=get_translation(language, "login"))
         login_button.config(text=get_translation(language, "login_button"))
-        result_label.config(text=get_translation(language, "please_login"))
+        instruction_label.config(text=get_translation(language, "instruction_text"))
 
         # Update buttons' texts (scan & exit)
         if 'scan_button' in locals():
@@ -500,7 +822,6 @@ def create_gui():
 
     # Run the Tkinter event loop
     root.mainloop()
-
 
 
 if __name__ == "__main__":
