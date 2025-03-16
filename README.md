@@ -114,11 +114,14 @@ If you have any questions or need support, feel free to contact us via [Email/Li
 ## **Demo** 📸
 
 Here's a sneak peek at how **VoteXpress** works:
+![Screenshot 2025-03-16 155357](https://github.com/user-attachments/assets/e98bfa3c-e143-4001-9b80-2477f04303d5)
 
-![Screenshot 1](login.png)
+![Screenshot 2025-03-16 235047](https://github.com/user-attachments/assets/2d56f44f-d6f3-406f-a4c0-cf69e0a0dbe2)
+
 *Login Page & QR Scanner*
 
-![Screenshot 2](verified.png)
+![Screenshot 2025-03-17 000832](https://github.com/user-attachments/assets/d6e88127-4610-4e80-896b-81da1d199e57)
+
 *Voter Verified Successfully*
 
 ---
