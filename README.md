@@ -1,6 +1,7 @@
-# ![image](https://github.com/user-attachments/assets/ebbba7fd-29be-44a4-9f69-93d51690bdfd) 
-# A Modern Polling Booth QR Code Scanner 📊✨
-**VoteXpress** is an innovative solution designed to streamline the voter verification process at polling booths using QR codes. By leveraging Google Sheets, QR code scanning, voice commands, and an intuitive interface, it empowers polling station operators to verify voters quickly and accurately. Whether you're a tech enthusiast, a developer, or just interested in cutting-edge voting tech, this project is a game-changer!
+# ![image](https://github.com/user-attachments/assets/ebbba7fd-29be-44a4-9f69-93d51690bdfd)
+# A Modern Polling Booth Verification System 📊✨
+
+**VoteXpress** is an innovative solution designed to streamline the voter verification process at polling booths using **Advanced Steganography Scanning & Decryption**. By leveraging Firestore, biometric authentication, and an intuitive interface, it empowers polling station operators to verify voters quickly and accurately. Whether you're a tech enthusiast, a developer, or just interested in cutting-edge voting tech, this project is a game-changer!
 
  <img  alt="Coding" src="https://media.giphy.com/media/xUOxfdB8Ttz0ulAzPG/giphy.gif?cid=ecf05e474s11auycebwq61x7hquhdr5bz15gcm849efchq2c&ep=v1_gifs_search&rid=giphy.gif&ct=g">
 ---
@@ -8,17 +9,17 @@
 ## **Features:**
 ![image](https://github.com/user-attachments/assets/40212fe8-2393-45c2-9215-6631958487be)
 
-- 📱 **QR Code Scanning:** Scan QR codes to easily fetch voter details.
-- 🎤 **Voice Commands:** Use voice commands to trigger key actions like scanning QR codes and exiting the app.
-- 🗳️ **Voter Verification:** Real-time verification against a Google Sheet database, ensuring data accuracy.
-- 🌐 **Multi-Language Support:** Seamless translation between English and Hindi (with potential for more languages).   
-- 🔒 **Secure Login:** Authenticate operators with secure usernames and passwords from Google Sheets.
-- 📈 **Polling Data Tracking:** Record the polling station and update voter status (Voted/Not Voted) directly in Google Sheets.
+- 🖼️ **Steganography Scanning & Decryption:** Extract voter details from an **image of a QR code** (not the QR code itself) using AES & RSA encryption.
+- 🎤 **Voice Commands:** Use voice commands to trigger key actions like scanning and exiting the app.
+- 🗳️ **Biometric Voter Verification:** Authenticate voters using **fingerprint & retina scans**.
+- 🌐 **Multi-Language Support:** Seamless translation between multiple languages for accessibility.   
+- 🔒 **Secure Operator Login:** Authenticate operators with assigned polling station credentials.
+- 📈 **Real-time Firestore Database Integration:** Instantly updates voter status as "Voted" after verification.
+- 🚨 **Fraud Prevention & Multi-Vote Detection:** Tracks attempts across polling stations & logs suspicious activity.
   
 ---
 
-## **Installation and Setup** 🛠️ 
-
+## **Installation and Setup** 🛠️
 
 To get started, follow these steps to set up and run the **VoteXpress** app on your machine.
 
@@ -36,17 +37,15 @@ To get started, follow these steps to set up and run the **VoteXpress** app on y
    ```
 
    The `requirements.txt` file includes all necessary libraries, including:
-   - `gspread` - For Google Sheets API.
-   - `oauth2client` - For authenticating with Google Sheets.
+   - `firebase-admin` - For Firestore database integration.
+   - `opencv-python` - For image processing.
+   - `face-recognition` - For facial authentication.
    - `speech_recognition` - For voice command processing.
-   - `opencv-python` - For QR code scanning.
 
-### 3. **Get Your Google Sheets Credentials:**
-   - Create a Google Cloud project and enable the **Google Sheets API**.
-   - Download your **service account JSON credentials** file and save it as `trial.json`.
-   - Place this `trial.json` file in the root directory of the project (next to the `.py` file).
-
-   📌 **Important:** Update the Google Sheets API access credentials and ensure your Google Sheets are set to allow the service account to access the data.
+### 3. **Set Up Firestore:**
+   - Create a Firebase project and enable **Firestore Database**.
+   - Download your **service account JSON credentials** file and save it as `firebase_credentials.json`.
+   - Place this `firebase_credentials.json` file in the root directory of the project.
 
 ### 4. **Run the Application:**
    To run the app, use the following command:
@@ -54,24 +53,26 @@ To get started, follow these steps to set up and run the **VoteXpress** app on y
    python VoteXpress.py
    ```
 
-   This will launch the graphical user interface (GUI) where you can login, scan QR codes, and track voter status.
+   This will launch the graphical user interface (GUI) where you can login, scan an image for steganography-encoded voter data, and track voter status.
     ![image](https://github.com/user-attachments/assets/0a730b59-6bd0-4524-8ff2-eab1377238d4)
 
 ---
 
-## **How It Works** 🧐 
+## **How It Works** 🧐
 ![image](https://github.com/user-attachments/assets/3ca2b09f-4e3d-4db5-a629-1e9d140175be)
 
 ### **Login Process:**
-- **Operator Login:** Operators log in using their **username** and **password** stored in a Google Sheet.
+- **Operator Login:** Operators log in using their **username** and **password** stored in Firestore.
 - **Polling Station Assignment:** After a successful login, the operator is assigned to a polling station.
   
-### **QR Code Scanning:**
-- Once logged in, the operator can use the **QR Code Scanner** to scan a voter's QR code.
-- **Voter Validation:** The app verifies the voter against the Google Sheets database. If all data matches and the voter is eligible, the status is updated to **Voted**.
+### **Steganography-Based Voter Verification:**
+- Once logged in, the operator can use the **Steganography Scanner** to analyze an **image of a QR code**.
+- **Data Decryption & Validation:** The app extracts and decrypts the voter data using AES & RSA encryption.
+- **Biometric Verification:** The system uses **fingerprint & retina scans** to confirm the voter's identity.
+- **Instant Voter Status Update:** The app instantly marks the voter as **"Voted"** in Firestore.
 
 ### **Voice Command Integration:**
-- **Scan QR:** Trigger QR code scanning by simply saying "Scan QR".
+- **Scan Image:** Trigger scanning using a voice command.
 - **Exit:** Exit the application by saying "Exit".
 
 ---
@@ -80,9 +81,9 @@ To get started, follow these steps to set up and run the **VoteXpress** app on y
 
 ## **Customizations & Future Improvements** 💡
 
-While the current version supports English and Hindi, we are planning to add **multi-language support** in the future. You can contribute to translating the interface to different languages!
+While the current version supports multiple languages, we welcome contributions to expand translation support.
 
-In the future, **Gemini** integration can be explored for even more powerful features like automated translations and intelligent suggestions.
+In the future, **AI-powered fraud detection** and **Gemini-based intelligent assistance** can be integrated for even more security enhancements.
 
 ---
 
@@ -118,7 +119,7 @@ Here's a sneak peek at how **VoteXpress** works:
 
 ![Screenshot 2025-03-16 235047](https://github.com/user-attachments/assets/2d56f44f-d6f3-406f-a4c0-cf69e0a0dbe2)
 
-*Login Page & QR Scanner*
+*Login Page & Steganography Scanner*
 
 ![Screenshot 2025-03-17 000832](https://github.com/user-attachments/assets/d6e88127-4610-4e80-896b-81da1d199e57)
 
