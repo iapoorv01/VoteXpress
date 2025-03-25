@@ -4,6 +4,7 @@
 **VoteXpress** is an innovative solution designed to streamline the voter verification process at polling booths using **Advanced Steganography Scanning & Decryption**. By leveraging Firestore, biometric authentication, and an intuitive interface, it empowers polling station operators to verify voters quickly and accurately. Whether you're a tech enthusiast, a developer, or just interested in cutting-edge voting tech, this project is a game-changer!
 
  <img  alt="Coding" src="https://media.giphy.com/media/xUOxfdB8Ttz0ulAzPG/giphy.gif?cid=ecf05e474s11auycebwq61x7hquhdr5bz15gcm849efchq2c&ep=v1_gifs_search&rid=giphy.gif&ct=g">
+ 
 ---
 
 ## **Features:**
@@ -52,9 +53,37 @@ To get started, follow these steps to set up and run the **VoteXpress** app on y
    ```bash
    python VoteXpress.py
    ```
+### **5. Generating an Executable (Optional)**  
+If you wish to convert VoteXpress into a standalone executable:  
+```bash
+python -m PyInstaller --onefile --hidden-import=face_recognition --hidden-import=dlib --add-data "shape_predictor_68_face_landmarks.dat;." --icon=Poolling.ico --name=VoteXpress VoteXpress_loader.py
+```  
+This will generate a `VoteXpress.exe` file inside the `dist/` folder.  
+
+✅ **Move `VoteXpress.exe` to the home directory**, as it requires access to asset files for proper functionality.
 
    This will launch the graphical user interface (GUI) where you can login, scan an image for steganography-encoded voter data, and track voter status.
-    ![image](https://github.com/user-attachments/assets/0a730b59-6bd0-4524-8ff2-eab1377238d4)
+
+### 🔍 **Testing the Scanning Feature**  
+To test the scanning functionality, use **`voter1_qr.png`**, as we have implemented a **QR code reader** for demo purposes. You can generate a QR code using:  
+```bash
+python qr_generation.py
+```  
+Once **steganography integration** is complete, you will experience the full functionality of our system.  
+
+### 🛠 **Understanding Our Unique Steganography Tool**  
+We have designed a **custom steganography tool** for securely embedding and extracting voter data. To provide better clarity on its uniqueness, the **steganography tool for embedding and extracting files** is available separately in the repository.  
+
+### 📌 **Adding Data to Firestore**  
+To insert data into Firestore:  
+- **Voter data** ➝ Add to **VoterDatabase**  
+- **Operator data** ➝ Add to **OperatorDatabase**  
+
+Use the provided script to generate and store the required data in Firestore seamlessly. 🚀  
+
+---
+
+   ![image](https://github.com/user-attachments/assets/0a730b59-6bd0-4524-8ff2-eab1377238d4)
 
 ---
 
