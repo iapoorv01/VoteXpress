@@ -2,7 +2,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # Initialize Firebase Admin SDK
-cred = credentials.Certificate("govt-database-firebase-adminsdk-fbsvc-a7ffad6280.json")# Path to your Firebase service account key
+cred = credentials.Certificate("firebase_credentials.json")# Path to your Firebase service account key
 firebase_admin.initialize_app(cred)
 
 # Initialize Firestore

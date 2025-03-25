@@ -12,7 +12,7 @@ import random
 import math
 import winsound
 # Initialize Firebase Admin SDK
-cred = credentials.Certificate("govt-database-firebase-adminsdk-fbsvc-a7ffad6280.json")
+cred = credentials.Certificate("firebase_credentials.json")
 firebase_admin.initialize_app(cred)
 
 # Initialize Firestore client
