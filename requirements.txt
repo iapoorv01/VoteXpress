@@ -1,0 +1,10 @@
+opencv-python
+firebase-admin
+speechrecognition
+numpy
+dlib
+face-recognition
+pillow
+pycryptodome
+qrcode
+lzma
